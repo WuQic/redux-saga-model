@@ -492,7 +492,7 @@ export class SagaModel {
      * @param {any} namespace 其他 namespace
      * @returns
      */
-    function put(action, namespace) {
+     const put = (action, namespace) => {
       const { type } = action;
       invariant(type, "dispatch: action should be a plain Object with type");
       warning(
@@ -513,6 +513,54 @@ export class SagaModel {
       });
     }
 
+    // The operator `put` doesn't block waiting the returned promise to resolve.
+    // Using `put.resolve` will wait until the promsie resolve/reject before resuming.
+    // It will be helpful to organize multi-effects in order,
+    // and increase the reusability by seperate the effect in stand-alone pieces.
+    // https://github.com/redux-saga/redux-saga/issues/336
+    const putResolve = (action, namespace) => {
+      const { type } = action;
+      // assertAction(type, 'sagaEffects.put.resolve');
+      invariant(type, "dispatch: action should be a plain Object with type");
+      warning(
+        type.indexOf(`${model.namespace}${SEP}`) !== 0,
+        `sagas.put: ${type} should not be prefixed with namespace ${
+          model.namespace
+        }`
+      );
+      const newType = namespace
+        ? this.prefix()
+          ? `${this.prefix()}${SEP}${namespace}${SEP}${type}`
+          : `${namespace}${SEP}${type}`
+        : this.prefixType(type, model);
+
+      return sagaEffects.put.resolve({
+        ...action,
+        type: newType
+      });
+    }
+    put.resolve = putResolve;
+
+    // The operator `put` doesn't block waiting the returned promise to resolve.
+    // Using `put.sync` will wait until the promsie resolve/reject before resuming.
+    // It will be helpful to organize multi-effects in order,
+    // and increase the reusability by seperate the effect in stand-alone pieces.
+    // https://github.com/redux-saga/redux-saga/issues/336
+    const putSync = (action, namespace) => {
+      const { type } = action;
+      // assertAction(type, 'sagaEffects.put.sync');
+      const newType = namespace
+        ? this.prefix()
+          ? `${this.prefix()}${SEP}${namespace}${SEP}${type}`
+          : `${namespace}${SEP}${type}`
+        : this.prefixType(type, model);
+      return sagaEffects.put.sync({
+        ...action,
+        type: newType
+      });
+    }
+    put.sync = putSync;
+
     /**
      * 对 saga 的 take 进行封装，默认捕获的 action 会补充当前 namespace,且必须是当前 model 存在能够被捕获的 saga 或 reducer
      * 否则需要提供 namespace
@@ -521,7 +569,7 @@ export class SagaModel {
      * @param {any} namespace 其他 namespace
      * @returns
      */
-    function take(pattern, namespace) {
+    const take = (pattern, namespace) => {
       // 判断是否捕获当前 namespaces。
       if (typeof pattern === "string") {
         // 如果是想 take 当前命名空间的话加上 namespace
@@ -549,8 +597,9 @@ export class SagaModel {
 
     return {
       ...sagaEffects,
-      put: this::put,
-      take: this::take
+      put,
+      // putResolve,
+      take
     };
   }
 
